@@ -219,18 +219,39 @@ void SetupAccumulationBuffers(int width, int height)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void SetupSceneData(GLuint ssbo)
+Material g_materials[] =
+{
+    // Matte Green
+    {0.2f, 1.0f, 0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, 
+
+    // Mirror
+    {1.0f, 0.2f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}, 
+
+    // Emissive White
+    {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 25.0f, 1.0f},
+
+    // Semi-Transparrent Blue
+    {0.2f, 0.2f, 1.0f, 0.0f, 0.1f, 0.0f, 0.0f, 1.0f} 
+};
+const int NUM_MATERIALS = sizeof(g_materials) / sizeof(Material);
+
+void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo)
 {
     Sphere scene[4];
 
-    scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f, 0.2f, 0.0f};
-    scene[1] = (Sphere){0.0f, -101.0f, 0.0f, 100.0f, 0.2f, 1.0f, 0.2f, 0.0f}; 
-    scene[2] = (Sphere){1.5f, 0.0f, 0.0f, 0.5f, 0.2f, 0.2f, 1.0f, 0.0f};
-    scene[3] = (Sphere){-1.5f, 0.0f, 0.0f, 0.5f, 0.4f, 1.0f, 0.2f, 0.0f}; 
+    scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
+    scene[1] = (Sphere){0.0f, -101.0f, 0.0f, 100.0f, 0}; 
+    scene[2] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
+    scene[3] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+    // Sphere Data
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(scene), scene, GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo); // Bind to binding = 0
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphere_ssbo); 
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, material_ssbo);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(g_materials), g_materials, GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, material_ssbo);
 }
 
 int main(int argc, char* argv[])
@@ -286,9 +307,12 @@ int main(int argc, char* argv[])
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    GLuint ssbo;
-    glGenBuffers(1, &ssbo);
-    SetupSceneData(ssbo);
+    GLuint ssbo_spheres;
+    GLuint ssbo_materials;
+    glGenBuffers(1, &ssbo_spheres);
+    glGenBuffers(1, &ssbo_materials);
+
+    SetupSceneData(ssbo_spheres, ssbo_materials);
 
     GLuint program = CreateShaderProgram();
     glUseProgram(program);

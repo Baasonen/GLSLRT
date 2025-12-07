@@ -3,10 +3,20 @@
 
 typedef struct 
 {
+    float cr, cg, cb;
+    float padding;
+    float roughness;
+    float metallic;
+    float emission;
+    float opacity;
+} Material;
+
+typedef struct 
+{
     float px, py, pz;
     float radius;
-    float r, g, b;
-    float padding;
+    int material_index;
+    float padding_sphere[3];
 } Sphere;
 
 typedef struct 

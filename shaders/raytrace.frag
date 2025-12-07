@@ -5,13 +5,21 @@ in vec2 v_uv;
 struct Sphere {
     vec3 pos;
     float radius;
-    vec3 color;
-    float padding;
+    int material_index;
+    float padding[3];
 };
 
-layout(std430, binding = 0) buffer SceneData {
-    Sphere spheres[];
+struct Material
+{
+    vec4 color;
+    float roughness;
+    float metallic;
+    float emission;
+    float opacity;
 };
+
+layout(std430, binding = 0) buffer SceneData {Sphere spheres[];};
+layout(std430, binding = 1) buffer MaterialData {Material materials[];};
 
 uniform vec2 u_resolution;
 uniform int u_frameCount;
@@ -20,6 +28,26 @@ uniform vec3 u_cameraPos;
 uniform float u_cameraYaw;
 uniform float u_cameraPitch;
 uniform int u_isDisplayPass;
+
+const float M_PI = 3.1415926;
+
+float random(inout float seed)
+{
+    seed = fract(sin(seed) * 443758.5);
+    return seed;
+}
+
+vec3 uniformSampleHemisphere(float r1, float r2)
+{
+    float z = r2;
+    float r = sqrt(1.0 - z * z);
+    float phi = 2.0 * M_PI * r1;
+
+    float x = r * cos(phi);
+    float y = r * sin(phi);
+
+    return vec3(x, y, z);
+}
 
 // Returns distance t to intersection (or -1.0 if miss)
 float hitSphere(Sphere s, vec3 ro, vec3 rd) {
@@ -60,24 +88,31 @@ float hash(vec2 p)
 
 const float SHININESS = 1000.0;
 
-vec3 shade(vec3 hitPost, vec3 normal, vec3 sphereColor, vec3 rd)
+vec3 shade(vec3 hitPost, vec3 normal, vec3 rd, int matIndex)
 {
+    Material mat = materials[matIndex];
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     vec3 V = -rd;
 
+    // Emission
+    vec3 emissive = mat.color.rgb * mat.emission;
+
     // Lambertian Diffuse
+    vec3 diffuseColor = mat.color.rgb * (1.0 - mat.metallic);
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = diff * sphereColor;
+    vec3 diffuse = diff * diffuseColor;
 
     // Specular
+    vec3 specularColor = mix(vec3(0.04), mat.color.rgb, mat.metallic);
     vec3 halfwayDir = normalize(lightDir + V);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), SHININESS);
-    vec3 specular = vec3(1.0) * spec;
+    float shininess = 1.0 / (mat.roughness * mat.roughness + 0.001);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), shininess);
+    vec3 specular = specularColor * spec;
 
     // Ambient
-    vec3 ambient = 0.1 * sphereColor;
+    vec3 ambient = 0.1 * mat.color.rgb;
 
-    return ambient + diffuse + specular;
+    return emissive + ambient + diffuse + specular;
 }
 
 void main() 
@@ -90,7 +125,7 @@ void main()
 
     vec2 pixel_coord = gl_FragCoord.xy;
 
-    float seed = hash(pixel_coord + float(u_frameCount));
+    float seed = hash(pixel_coord * 0.123 + vec2(u_frameCount * 12.34, u_frameCount * u_frameCount));
     vec2 jitter = (vec2(hash(pixel_coord.xy), hash(pixel_coord.xy + 1.0)) * 2.0 - 1.0);
     float aspect = u_resolution.x / u_resolution.y;
     vec2 uv = (pixel_coord + jitter) / u_resolution * 2.0 - 1.0;
@@ -117,7 +152,7 @@ void main()
     vec3 finalColor = vec3(0.0, 0.0, 0.0);
     vec3 throughput = vec3(1.0, 1.0, 1.0);
 
-    const int MAX_BOUNCES = 50;
+    const int MAX_BOUNCES = 10;
 
     for (int bounce = 0; bounce < MAX_BOUNCES; bounce++)
     {
@@ -129,18 +164,36 @@ void main()
             vec3 hitPos = ro + rd * minT;
             vec3 normal = normalize(hitPos - spheres[hitIndex].pos);
 
-            // Direct Only
-            if (bounce == 0)
+            int matIndex = spheres[hitIndex].material_index;
+            Material mat = materials[matIndex];
+
+            if (mat.opacity < 0.99)
             {
-                finalColor += throughput * shade(hitPos, normal, spheres[hitIndex].color, rd);
+                ro = hitPos + rd * 0.001;
+                if (mat.opacity < 0.1) continue;
             }
 
-            // Reflect Ray For Next Bounce
+            finalColor += throughput * (mat.color.rgb * mat.emission);
 
-            rd = reflect(rd, normal);
-            ro = hitPos + normal * 0.001; // Epsilon Push
+            if (mat.metallic > 0.5)
+            {
+                rd = normalize(reflect(rd, normal));
+                throughput *= mat.color.rgb;
+            }
+            else
+            {
+                vec3 localDir = uniformSampleHemisphere(random(seed), random(seed));
 
-            throughput *= spheres[hitIndex].color * 0.9;
+                vec3 u = normalize(cross(abs(normal.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0), normal));
+                vec3 v = cross(normal, u);
+
+                rd = normalize(u * localDir.x + v * localDir.y + normal * localDir.z);
+
+                float cos_theta = max(dot(rd, normal), 0.0);
+                throughput *= mat.color.rgb * (1.0 - mat.metallic) * 2.0 * cos_theta;
+            }
+
+            ro = hitPos + normal * 0.001;
         }
         else // Hit Sky / OOB
         {
