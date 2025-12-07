@@ -2,16 +2,31 @@
 #include <glfw3.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include "struct.h"
 #include "file_util.h"
 
+#ifndef M_PI
+#define M_PI 3.1415926
+#endif
+
+float radians(float deg) {return deg * (M_PI / 180.0f);}
+
 #define WIDTH 1280
 #define HEIGHT 720
 
+bool g_firstMouse = true;
+float g_lastX = WIDTH / 2.0f;
+float g_lastY = HEIGHT / 2.0f;
+float g_mouseSensitivity = 0.1f;
+
 int g_frameCount = 0;
-Camera g_camera = {0.0f, 0.0f, 2.0f, 0.0f, 0.0f, 1.0f};
-float g_cameraSpeed = 0.0005f;
+Camera g_camera = {0.0f, 0.0f, 2.0f, -90.0f, 0.0f, 1.0f};
+float g_cameraSpeed = 2.5f;
+
+float g_lastFrame = 0.0f;
+float g_deltaTime = 0.0f;
 
 bool g_framebufferResized = false;
 int g_newWidth = WIDTH;
@@ -25,6 +40,44 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     g_framebufferResized = true;
 }
 
+void calculateCameraVectors(Camera* camera, float* forwardX, float* forwardZ, float* rightX, float* rightZ)
+{
+    float yawRads = radians(camera->yaw);
+
+    *forwardX = cos(yawRads);
+    *forwardZ = sin(yawRads);
+
+    *rightX = cos(yawRads + radians(90.0f));
+    *rightZ = sin(yawRads + radians(90.0f));
+}
+
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    if (g_firstMouse)
+    {
+        g_lastX = (float)xpos;
+        g_lastY = (float)ypos;
+        g_firstMouse = false;
+        return;
+    }
+
+    float xoffset = (float)xpos - g_lastX;
+    float yoffset = g_lastY - (float)ypos;
+    g_lastX = (float)xpos;
+    g_lastY = (float)ypos;
+
+    xoffset *= g_mouseSensitivity;
+    yoffset *= g_mouseSensitivity;
+
+    g_camera.yaw += xoffset;
+    g_camera.pitch += yoffset;
+
+    if (g_camera.pitch > 89.0f) {g_camera.pitch = 89.0f;}
+    if (g_camera.pitch < -89.0f) {g_camera.pitch = -89.0f;}
+
+    g_frameCount = 0;
+}
+
 bool processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -33,19 +86,43 @@ bool processInput(GLFWwindow* window)
     }
 
     bool moved = false;
-    float delta = g_cameraSpeed;
+    float camVelocity = g_cameraSpeed * g_deltaTime;
 
+    float forwardX, forwardZ, rightX, rightZ;
+    calculateCameraVectors(&g_camera, &forwardX, &forwardZ, &rightX, &rightZ);
+
+    
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        g_camera.pz -= delta; moved = true;
+        g_camera.px += forwardX * camVelocity;
+        g_camera.pz += forwardZ * camVelocity;
+        moved = true;
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        g_camera.pz += delta; moved = true;
+        g_camera.px -= forwardX * camVelocity;
+        g_camera.pz -= forwardZ * camVelocity;
+        moved = true;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        g_camera.px += delta; moved = true;
+        g_camera.px -= rightX * camVelocity;
+        g_camera.pz -= rightZ * camVelocity;
+        moved = true;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        g_camera.px -= delta; moved = true;
+        g_camera.px += rightX * camVelocity;
+        g_camera.pz += rightZ * camVelocity;
+        moved = true;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    {
+        g_camera.py += camVelocity;
+        moved = true;
+    }
+    
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+    {
+        g_camera.py -= camVelocity;
+        moved = true;
     }
 
     return moved;
@@ -144,11 +221,12 @@ void SetupAccumulationBuffers(int width, int height)
 
 void SetupSceneData(GLuint ssbo)
 {
-    Sphere scene[3];
+    Sphere scene[4];
 
     scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f, 0.2f, 0.0f};
     scene[1] = (Sphere){0.0f, -101.0f, 0.0f, 100.0f, 0.2f, 1.0f, 0.2f, 0.0f}; 
     scene[2] = (Sphere){1.5f, 0.0f, 0.0f, 0.5f, 0.2f, 0.2f, 1.0f, 0.0f};
+    scene[3] = (Sphere){-1.5f, 0.0f, 0.0f, 0.5f, 0.4f, 1.0f, 0.2f, 0.0f}; 
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(scene), scene, GL_STATIC_DRAW);
@@ -181,6 +259,10 @@ int main(int argc, char* argv[])
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    // Capture And Hide Mouse Pointer
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetCursorPosCallback(window, mouse_callback);
 
     // Load OpenGL Functions 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -216,6 +298,10 @@ int main(int argc, char* argv[])
     // Main Loop
     while (!glfwWindowShouldClose(window))
     {
+        float currentFrame = (float)glfwGetTime();
+        g_deltaTime = currentFrame - g_lastFrame;
+        g_lastFrame = currentFrame;
+            
         // Handle Window Resize
         if (g_framebufferResized)
         {
@@ -241,6 +327,8 @@ int main(int argc, char* argv[])
         glUniform1i(glGetUniformLocation(program, "u_frameCount"), g_frameCount);
         glUniform1i(glGetUniformLocation(program, "u_historyTexture"), 0);
         glUniform3f(glGetUniformLocation(program, "u_cameraPos"), g_camera.px, g_camera.py, g_camera.pz);
+        glUniform1f(glGetUniformLocation(program, "u_cameraYaw"), g_camera.yaw);
+        glUniform1f(glGetUniformLocation(program, "u_cameraPitch"), g_camera.pitch);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, g_outputTexture);
