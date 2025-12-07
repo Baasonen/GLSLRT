@@ -11,11 +11,18 @@
 
 int g_frameCount = 0;
 Camera g_camera = {0.0f, 0.0f, 2.0f, 0.0f, 0.0f, 1.0f};
-float g_cameraSpeed = 0.05f;
+float g_cameraSpeed = 0.0005f;
+
+bool g_framebufferResized = false;
+int g_newWidth = WIDTH;
+int g_newHeight = HEIGHT;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
+    g_newWidth = width;
+    g_newHeight = height;
+    g_framebufferResized = true;
 }
 
 bool processInput(GLFWwindow* window)
@@ -35,10 +42,10 @@ bool processInput(GLFWwindow* window)
         g_camera.pz += delta; moved = true;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        g_camera.px -= delta; moved = true;
+        g_camera.px += delta; moved = true;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        g_camera.px += delta; moved = true;
+        g_camera.px -= delta; moved = true;
     }
 
     return moved;
@@ -102,7 +109,7 @@ GLuint g_accumTexture;
 GLuint g_outputTexture;
 
 // Frame Buffer init
-void SetupAccumulationBuffers()
+void SetupAccumulationBuffers(int width, int height)
 {
     glGenFramebuffers(1, &g_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
@@ -110,14 +117,14 @@ void SetupAccumulationBuffers()
     // TX1: Accumulated
     glGenTextures(1, &g_accumTexture);
     glBindTexture(GL_TEXTURE_2D, g_accumTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // TX2: Output
     glGenTextures(1, &g_outputTexture);
     glBindTexture(GL_TEXTURE_2D, g_outputTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -143,6 +150,7 @@ void SetupSceneData(GLuint ssbo)
     scene[1] = (Sphere){0.0f, -101.0f, 0.0f, 100.0f, 0.2f, 1.0f, 0.2f, 0.0f}; 
     scene[2] = (Sphere){1.5f, 0.0f, 0.0f, 0.5f, 0.2f, 0.2f, 1.0f, 0.0f};
 
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(scene), scene, GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo); // Bind to binding = 0
 }
@@ -185,6 +193,12 @@ int main(int argc, char* argv[])
     // Disable VSync
     glfwSwapInterval(0);
 
+    // Fix Black Screen At Startup
+    int initialWidth, initialheight;
+    glfwGetFramebufferSize(window, &initialWidth, &initialheight);
+
+    framebuffer_size_callback(window, initialWidth, initialheight);
+
     // Buffer Setup
     GLuint vao;
     glGenVertexArrays(1, &vao);
@@ -197,17 +211,29 @@ int main(int argc, char* argv[])
     GLuint program = CreateShaderProgram();
     glUseProgram(program);
 
-    glUniform2f(glGetUniformLocation(program, "u_resolution"), (float)WIDTH, (float)HEIGHT);
-
-
-    SetupAccumulationBuffers();
+    //glUniform2f(glGetUniformLocation(program, "u_resolution"), (float)WIDTH, (float)HEIGHT);
 
     // Main Loop
     while (!glfwWindowShouldClose(window))
     {
+        // Handle Window Resize
+        if (g_framebufferResized)
+        {
+            glDeleteTextures(1, &g_accumTexture);
+            glDeleteTextures(1, &g_outputTexture);
+            glDeleteFramebuffers(1, &g_fbo);
+
+            SetupAccumulationBuffers(g_newWidth, g_newHeight);
+
+            g_frameCount = 0;
+            g_framebufferResized = false;
+        }
+
         bool cameraMoved = processInput(window);
         if (cameraMoved) {g_frameCount = 0;}
         g_frameCount++;
+
+        glUniform2f(glGetUniformLocation(program, "u_resolution"), (float)g_newWidth, (float)g_newHeight);
 
         glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_accumTexture, 0);

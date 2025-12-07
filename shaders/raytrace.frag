@@ -51,9 +51,8 @@ void main()
     uv.x *= aspect;
     
     vec3 ro = u_cameraPos;
-    vec3 lookAt = vec3(0.0, 0.0, 0.0);
-    vec3 forward = normalize(lookAt - ro);
-    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
+    vec3 forward = vec3(0.0, 0.0, -1.0);
+    vec3 right = cross(vec3(0.0, 1.0, 0.0), forward);
     vec3 up = cross(forward, right);
 
     float fov = 45.0;
@@ -103,7 +102,7 @@ void main()
         weight = 1.0;
     }
 
-    //vec3 finalColor = mix(prevColor, col, weight);
-    vec3 finalColor = col;
+    vec3 finalColor = mix(prevColor, col, weight);
+    //vec3 finalColor = col;
     FragColor = vec4(finalColor, 1.0);
 }
