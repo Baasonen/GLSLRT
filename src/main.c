@@ -221,28 +221,34 @@ void SetupAccumulationBuffers(int width, int height)
 
 Material g_materials[] =
 {
-    // Matte Green
+    // Matte Green 0
     {0.2f, 1.0f, 0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, 
 
-    // Mirror
+    // Mirror 1
     {1.0f, 1.0f, 1.0f, 0.0f, 0.1f, 1.0f, 0.0f, 1.0f}, 
 
-    // Emissive White
-    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 5.0f, 1.0f},
+    // Emissive White 2
+    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 25.0f, 1.0f},
 
-    // Semi-Transparrent Blue
-    {0.2f, 0.2f, 1.0f, 0.0f, 0.2f, 0.0f, 0.0f, 0.2f} 
+    {0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 15.0f, 1.0f},
+
+    // Semi-Transparrent Blue 4
+    {0.2f, 0.2f, 1.0f, 0.0f, 0.2f, 0.0f, 0.0f, 0.2f}, 
+ 
+    // Matte white 5
+    {1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f} 
 };
 const int NUM_MATERIALS = sizeof(g_materials) / sizeof(Material);
 
 void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo)
 {
-    Sphere scene[4];
+    Sphere scene[5];
 
     scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
     scene[1] = (Sphere){0.0f, -101.0f, 0.0f, 100.0f, 0}; 
     scene[2] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
     scene[3] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
+    scene[4] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
 
     // Sphere Data
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
@@ -293,8 +299,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Disable VSync
-    glfwSwapInterval(0);
+
+    glfwSwapInterval(1);
 
     // Fix Black Screen At Startup
     int initialWidth, initialheight;

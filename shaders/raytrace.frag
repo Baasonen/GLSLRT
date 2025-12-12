@@ -212,7 +212,8 @@ void main()
         else // Hit Sky / OOB
         {   
             float skyT = 0.5 * (current_rd.y + 1.0);
-            vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
+            //vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
+            vec3 skyColor = vec3(0.0, 0.0, 0.0);
             accumulatedLight += throughput * skyColor;
             break;
         }
