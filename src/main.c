@@ -225,7 +225,7 @@ Material g_materials[] =
     {0.2f, 1.0f, 0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, 
 
     // Mirror 1
-    {1.0f, 1.0f, 1.0f, 0.0f, 0.1f, 1.0f, 0.0f, 1.0f}, 
+    {1.0f, 1.0f, 1.0f, 0.0f, 0.2f, 1.0f, 0.0f, 1.0f}, 
 
     // Emissive White 2
     {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 25.0f, 1.0f},
@@ -242,13 +242,36 @@ const int NUM_MATERIALS = sizeof(g_materials) / sizeof(Material);
 
 void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo)
 {
+    Triangle mesh_data[2];
+
+    mesh_data[0] = (Triangle){
+    {-5.0, -1.5, 5.0}, 0.0f,
+    { 5.0, -1.5, 5.0}, 0.0f,
+    {-5.0, -1.5,-5.0}, 0.0f,
+    5, // Material Index (White)
+    {0,0,0}};
+
+    mesh_data[1] = (Triangle){
+    {-5.0, -1.5,-5.0}, 0.0f,
+    { 5.0, -1.5, 5.0}, 0.0f,
+    { 5.0, -1.5,-5.0}, 0.0f,
+    5, 
+    {0,0,0}};
+
+    GLuint ssbo_triangles;
+    glGenBuffers(1, &ssbo_triangles);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_triangles);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(mesh_data), mesh_data, GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_triangles);
+
+    // Setup spheres
     Sphere scene[5];
 
     scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
-    scene[1] = (Sphere){0.0f, -101.0f, 0.0f, 100.0f, 0}; 
-    scene[2] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
-    scene[3] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
-    scene[4] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
+    scene[1] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
+    scene[2] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
+    scene[3] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
+    scene[4] = (Sphere){0.0f, 0.0f, 3.0f, 1.0f, 5}; 
 
     // Sphere Data
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
@@ -299,8 +322,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-
-    glfwSwapInterval(1);
+    // Disable vSync
+    glfwSwapInterval(0);
 
     // Fix Black Screen At Startup
     int initialWidth, initialheight;

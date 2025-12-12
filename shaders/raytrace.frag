@@ -18,8 +18,18 @@ struct Material
     float opacity;
 };
 
+struct Triangle
+{
+    vec3 v0; float pad0;
+    vec3 v1; float pad1;
+    vec3 v2; float pad2;
+    int material_index;
+    float padding[3];
+};
+
 layout(std430, binding = 0) buffer SceneData {Sphere spheres[];};
 layout(std430, binding = 1) buffer MaterialData {Material materials[];};
+layout(std430, binding = 2) buffer TriangleData {Triangle triangles[];};
 
 uniform vec2 u_resolution;
 uniform int u_frameCount;
@@ -60,6 +70,37 @@ vec3 cosHemisphere(vec3 n, inout uint seed)
     return tangent * localRay.x + bitangent * localRay.y + n * localRay.z;
 }
 
+float hitTriangle(Triangle tri, vec3 ro, vec3 rd)
+{
+    vec3 v0 = tri.v0;
+    vec3 v1 = tri.v1;
+    vec3 v2 = tri.v2;
+
+    vec3 edge1 = v1 - v0;
+    vec3 edge2 = v2 - v0;
+    vec3 h = cross(rd, edge2);
+    float a = dot(edge1, h);
+
+    // Parallel check
+    if (a > -0.001 && a < 0.001) {return -1.0;}
+
+    float f = 1.0 / a;
+    vec3 s = ro - v0;
+    float u = f * dot(s, h);
+
+    if (u <  0.0 || u > 1.0) {return -1.0;}
+
+    vec3 q = cross(s, edge1);
+    float v = f * dot(rd, q);
+
+    if (v < 0.0 || u + v > 1.0) {return -1.0;}
+
+    float t = f * dot(edge2, q);
+
+    if (t > 0.001) {return t;}
+    return -1.0;
+}
+
 // Returns distance t to intersection (or -1.0 if miss)
 float hitSphere(Sphere s, vec3 ro, vec3 rd) {
     vec3 oc = ro - s.pos;
@@ -73,11 +114,14 @@ float hitSphere(Sphere s, vec3 ro, vec3 rd) {
     return -b - sqrt(h); 
 }
 
-int findClosestHit(vec3 ro, vec3 rd, out float minT)
+// Hit type: 0 miss, 1 sphere, 2 triangle
+void findClosestHit(vec3 ro, vec3 rd, out float minT, out int hitIndex, out int hitType)
 {
     minT = 10000.0;
-    int hitIndex = -1;
+    hitIndex = -1;
+    hitType = 0;
 
+    // Check for sphere
     for(int i = 0; i < spheres.length(); i++)
     {
         float t = hitSphere(spheres[i], ro, rd);
@@ -85,9 +129,21 @@ int findClosestHit(vec3 ro, vec3 rd, out float minT)
         {
             minT = t;
             hitIndex = i;
+            hitType = 1;
         }
     }
-    return hitIndex;
+
+    // Check for triangle
+    for(int i = 0; i < triangles.length(); i++)
+    {
+        float t = hitTriangle(triangles[i], ro, rd);
+        if (t > 0.001 && t < minT)
+        {
+            minT = t;
+            hitIndex = i;
+            hitType = 2;
+        }
+    }
 }
 
 float hash(vec2 p)
@@ -167,20 +223,39 @@ void main()
     vec3 current_ro = u_cameraPos;
     vec3 current_rd = rd;
 
-    const int MAX_BOUNCES = 10;
+    const int MAX_BOUNCES = 15;
 
     for (int bounce = 0; bounce < MAX_BOUNCES; bounce++)
     {
         float minT;
-        int hitIndex = findClosestHit(current_ro, current_rd, minT);
+        int hitIndex;
+        int hitType;
+        findClosestHit(current_ro, current_rd, minT, hitIndex, hitType);
 
         if (hitIndex != -1)
         {
-            Sphere sphere = spheres[hitIndex];
-            Material mat = materials[sphere.material_index];
-
             vec3 hitPos = current_ro + current_rd * minT;
-            vec3 normal = normalize(hitPos - sphere.pos);
+            vec3 normal;
+            int matIndex;
+
+            if (hitType == 1)
+            {
+                Sphere s = spheres[hitIndex];
+                normal = normalize(hitPos - s.pos);
+                matIndex = s.material_index;   
+            }
+            else if (hitType == 2)
+            {
+                Triangle t = triangles[hitIndex];
+                vec3 edge1 = t.v1 - t.v0;
+                vec3 edge2 = t.v2 - t.v0;
+                normal = normalize(cross(edge1, edge2));
+                matIndex = t.material_index;
+
+                // Flip normal if hit back face
+                if (dot(normal, current_rd) > 0.0) {normal = -normal;}
+            }
+            Material mat = materials[matIndex];
 
             // Emissive
             accumulatedLight += mat.color.rgb * mat.emission * throughput;
@@ -212,8 +287,8 @@ void main()
         else // Hit Sky / OOB
         {   
             float skyT = 0.5 * (current_rd.y + 1.0);
-            //vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
-            vec3 skyColor = vec3(0.0, 0.0, 0.0);
+            vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
+            //vec3 skyColor = vec3(0.0, 0.0, 0.0);
             accumulatedLight += throughput * skyColor;
             break;
         }
