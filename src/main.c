@@ -225,13 +225,13 @@ Material g_materials[] =
     {0.2f, 1.0f, 0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f}, 
 
     // Mirror
-    {1.0f, 0.2f, 0.2f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}, 
+    {1.0f, 1.0f, 1.0f, 0.0f, 0.1f, 1.0f, 0.0f, 1.0f}, 
 
     // Emissive White
-    {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 25.0f, 1.0f},
+    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 5.0f, 1.0f},
 
     // Semi-Transparrent Blue
-    {0.2f, 0.2f, 1.0f, 0.0f, 0.1f, 0.0f, 0.0f, 1.0f} 
+    {0.2f, 0.2f, 1.0f, 0.0f, 0.2f, 0.0f, 0.0f, 0.2f} 
 };
 const int NUM_MATERIALS = sizeof(g_materials) / sizeof(Material);
 

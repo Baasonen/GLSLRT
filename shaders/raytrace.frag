@@ -31,22 +31,33 @@ uniform int u_isDisplayPass;
 
 const float M_PI = 3.1415926;
 
-float random(inout float seed)
+uint pcg_hash(inout uint state)
 {
-    seed = fract(sin(seed) * 443758.5);
-    return seed;
+    state = state * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
 }
 
-vec3 uniformSampleHemisphere(float r1, float r2)
+float random(inout uint state)
 {
-    float z = r2;
-    float r = sqrt(1.0 - z * z);
+    return float(pcg_hash(state) * 2.3283064365386963e-10);
+}
+
+vec3 cosHemisphere(vec3 n, inout uint seed)
+{
+    float r1 = random(seed);
+    float r2 = random(seed);
+
     float phi = 2.0 * M_PI * r1;
+    float cosTheta = sqrt(1.0 - r2);
+    float sinTheta = sqrt(r2);
 
-    float x = r * cos(phi);
-    float y = r * sin(phi);
+    vec3 localRay = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 
-    return vec3(x, y, z);
+    vec3 up = abs(n.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
+    vec3 tangent = normalize(cross(up, n));
+    vec3 bitangent = cross(n, tangent);
+    return tangent * localRay.x + bitangent * localRay.y + n * localRay.z;
 }
 
 // Returns distance t to intersection (or -1.0 if miss)
@@ -125,8 +136,10 @@ void main()
 
     vec2 pixel_coord = gl_FragCoord.xy;
 
-    float seed = hash(pixel_coord * 0.123 + vec2(u_frameCount * 12.34, u_frameCount * u_frameCount));
-    vec2 jitter = (vec2(hash(pixel_coord.xy), hash(pixel_coord.xy + 1.0)) * 2.0 - 1.0);
+    uint seed = uint(pixel_coord.x) + uint(pixel_coord.y) * uint(u_resolution.x) + uint(u_frameCount) * 7125413u;
+
+    // Camera setup
+    vec2 jitter = (vec2(random(seed), random(seed)) - 0.5);
     float aspect = u_resolution.x / u_resolution.y;
     vec2 uv = (pixel_coord + jitter) / u_resolution * 2.0 - 1.0;
     uv.x *= aspect;
@@ -149,68 +162,68 @@ void main()
     vec3 rd = normalize(forward + uv.x * tanFov * right + uv.y * tanFov * up);
 
     // Recursive Raytracing
-    vec3 finalColor = vec3(0.0, 0.0, 0.0);
+    vec3 accumulatedLight = vec3(0.0, 0.0, 0.0);
     vec3 throughput = vec3(1.0, 1.0, 1.0);
+    vec3 current_ro = u_cameraPos;
+    vec3 current_rd = rd;
 
     const int MAX_BOUNCES = 10;
 
     for (int bounce = 0; bounce < MAX_BOUNCES; bounce++)
     {
         float minT;
-        int hitIndex = findClosestHit(ro, rd, minT);
+        int hitIndex = findClosestHit(current_ro, current_rd, minT);
 
         if (hitIndex != -1)
         {
-            vec3 hitPos = ro + rd * minT;
-            vec3 normal = normalize(hitPos - spheres[hitIndex].pos);
+            Sphere sphere = spheres[hitIndex];
+            Material mat = materials[sphere.material_index];
 
-            int matIndex = spheres[hitIndex].material_index;
-            Material mat = materials[matIndex];
+            vec3 hitPos = current_ro + current_rd * minT;
+            vec3 normal = normalize(hitPos - sphere.pos);
 
-            if (mat.opacity < 0.99)
+            // Emissive
+            accumulatedLight += mat.color.rgb * mat.emission * throughput;
+
+            // Simple Schlik Fresnel approx.
+            float fresnel = 0.04 + (1.0 - 0.04) * pow(1.0 - max(dot(normal, -current_rd), 0.0), 5.0);
+            bool isSpecular = random(seed) < mix(fresnel, 1.0, mat.metallic);
+
+            if (isSpecular)
             {
-                ro = hitPos + rd * 0.001;
-                if (mat.opacity < 0.1) continue;
-            }
+                vec3 reflectDir = reflect(current_rd, normal);
 
-            finalColor += throughput * (mat.color.rgb * mat.emission);
-
-            if (mat.metallic > 0.5)
-            {
-                rd = normalize(reflect(rd, normal));
-                throughput *= mat.color.rgb;
+                current_rd = normalize(mix(reflectDir, cosHemisphere(normal, seed), mat.roughness * mat.roughness));
+                throughput *= mix(vec3(1.0), mat.color.rgb, mat.metallic);
             }
             else
             {
-                vec3 localDir = uniformSampleHemisphere(random(seed), random(seed));
-
-                vec3 u = normalize(cross(abs(normal.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0), normal));
-                vec3 v = cross(normal, u);
-
-                rd = normalize(u * localDir.x + v * localDir.y + normal * localDir.z);
-
-                float cos_theta = max(dot(rd, normal), 0.0);
-                throughput *= mat.color.rgb * (1.0 - mat.metallic) * 2.0 * cos_theta;
+                current_rd = cosHemisphere(normal, seed);
+                throughput *= mat.color.rgb;
             }
 
-            ro = hitPos + normal * 0.001;
+            // Offset to prevent self intersection
+            current_ro = hitPos + normal * 0.001;
+
+            float p = max(throughput.r, max(throughput.g, throughput.b));
+            if (random(seed) > p) break;
+            throughput /= p;
         }
         else // Hit Sky / OOB
-        {
-            vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (uv.y + 1.0));
-            finalColor += throughput * skyColor;
+        {   
+            float skyT = 0.5 * (current_rd.y + 1.0);
+            vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
+            accumulatedLight += throughput * skyColor;
             break;
         }
     }
 
     // Gamma Correction
-    finalColor = pow(finalColor, vec3(1.0 / 2.2));
-
     vec3 prevColor = texture(u_historyTexture, pixel_coord / u_resolution).rgb;
+    prevColor = pow(prevColor, vec3(2.2));
 
     float weight = 1.0 / float(u_frameCount);
-    if (u_frameCount == 1) {weight = 1.0;}
+    vec3 finalLinear = mix(prevColor, accumulatedLight, weight);
 
-    vec3 accumulatedColor = mix(prevColor, finalColor, weight);
-    FragColor = vec4(accumulatedColor, 1.0);
+    FragColor = vec4(pow(finalLinear, vec3(1.0 / 2.2)), 1.0);
 }
