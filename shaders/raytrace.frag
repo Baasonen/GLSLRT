@@ -18,18 +18,11 @@ struct Material
     float opacity;
 };
 
-struct Triangle
-{
-    vec3 v0; float pad0;
-    vec3 v1; float pad1;
-    vec3 v2; float pad2;
-    int material_index;
-    float padding[3];
-};
-
 layout(std430, binding = 0) buffer SceneData {Sphere spheres[];};
 layout(std430, binding = 1) buffer MaterialData {Material materials[];};
-layout(std430, binding = 2) buffer TriangleData {Triangle triangles[];};
+
+layout(std430, binding = 2) buffer VertexData {vec3 vertices[];};
+layout(std430, binding = 3) buffer IndexData {uint indices[];};
 
 uniform vec2 u_resolution;
 uniform int u_frameCount;
@@ -70,11 +63,15 @@ vec3 cosHemisphere(vec3 n, inout uint seed)
     return tangent * localRay.x + bitangent * localRay.y + n * localRay.z;
 }
 
-float hitTriangle(Triangle tri, vec3 ro, vec3 rd)
+float hitTriangleIndexed(int triIndex, vec3 ro, vec3 rd)
 {
-    vec3 v0 = tri.v0;
-    vec3 v1 = tri.v1;
-    vec3 v2 = tri.v2;
+    uint i0 = indices[3 * triIndex + 0];
+    uint i1 = indices[3 * triIndex + 1];
+    uint i2 = indices[3 * triIndex + 2];
+
+    vec3 v0 = vertices[i0];
+    vec3 v1 = vertices[i1];
+    vec3 v2 = vertices[i2];
 
     vec3 edge1 = v1 - v0;
     vec3 edge2 = v2 - v0;
@@ -134,9 +131,10 @@ void findClosestHit(vec3 ro, vec3 rd, out float minT, out int hitIndex, out int 
     }
 
     // Check for triangle
-    for(int i = 0; i < triangles.length(); i++)
+    int triCount = indices.length() / 3;
+    for(int i = 0; i < triCount; i++)
     {
-        float t = hitTriangle(triangles[i], ro, rd);
+        float t = hitTriangleIndexed(i, ro, rd);
         if (t > 0.001 && t < minT)
         {
             minT = t;
@@ -246,11 +244,19 @@ void main()
             }
             else if (hitType == 2)
             {
-                Triangle t = triangles[hitIndex];
-                vec3 edge1 = t.v1 - t.v0;
-                vec3 edge2 = t.v2 - t.v0;
+                uint i0 = indices[3 * hitIndex + 0];
+                uint i1 = indices[3 * hitIndex + 1];
+                uint i2 = indices[3 * hitIndex + 2];
+                
+                vec3 v0 = vertices[i0];
+                vec3 v1 = vertices[i1];
+                vec3 v2 = vertices[i2];
+
+                vec3 edge1 = v1 - v0;
+                vec3 edge2 = v2 - v0;
+
                 normal = normalize(cross(edge1, edge2));
-                matIndex = t.material_index;
+                matIndex = 5;
 
                 // Flip normal if hit back face
                 if (dot(normal, current_rd) > 0.0) {normal = -normal;}
@@ -287,8 +293,8 @@ void main()
         else // Hit Sky / OOB
         {   
             float skyT = 0.5 * (current_rd.y + 1.0);
-            //vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
-            vec3 skyColor = vec3(0.0, 0.0, 0.0);
+            vec3 skyColor = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), 0.5 * (current_rd.y + 1.0));
+            //vec3 skyColor = vec3(0.0, 0.0, 0.0);
             accumulatedLight += throughput * skyColor;
             break;
         }

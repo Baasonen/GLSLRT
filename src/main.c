@@ -6,6 +6,7 @@
 
 #include "struct.h"
 #include "file_util.h"
+#include "obj_loader.h"
 
 #ifndef M_PI
 #define M_PI 3.1415926
@@ -240,38 +241,35 @@ Material g_materials[] =
 };
 const int NUM_MATERIALS = sizeof(g_materials) / sizeof(Material);
 
-void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo)
+void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo, GLuint vertex_ssbo, GLuint index_ssbo)
 {
-    Triangle mesh_data[2];
+    // Load OBJ
+    MeshData mesh = load_obj("a.obj");
 
-    mesh_data[0] = (Triangle){
-    {-5.0, -1.5, 5.0}, 0.0f,
-    { 5.0, -1.5, 5.0}, 0.0f,
-    {-5.0, -1.5,-5.0}, 0.0f,
-    5, // Material Index (White)
-    {0,0,0}};
+    if (mesh.vertices != NULL && mesh.indices != NULL)
+    {
+        fprintf(stderr, "Loaded mesh with %zu v, %zu i\n", mesh.num_vertices / 3, mesh.num_indices);
 
-    mesh_data[1] = (Triangle){
-    {-5.0, -1.5,-5.0}, 0.0f,
-    { 5.0, -1.5, 5.0}, 0.0f,
-    { 5.0, -1.5,-5.0}, 0.0f,
-    5, 
-    {0,0,0}};
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, vertex_ssbo);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, mesh.num_vertices * sizeof(float), mesh.vertices, GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, vertex_ssbo);
 
-    GLuint ssbo_triangles;
-    glGenBuffers(1, &ssbo_triangles);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_triangles);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(mesh_data), mesh_data, GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_triangles);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, index_ssbo);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, mesh.num_indices * sizeof(unsigned int), mesh.indices, GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, index_ssbo);
+
+        free_mesh_data(&mesh);
+    }   
+    else {fprintf(stderr, "Failed to load OBJ");}
 
     // Setup spheres
     Sphere scene[5];
 
-    scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
-    scene[1] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
-    scene[2] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
-    scene[3] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
-    scene[4] = (Sphere){0.0f, 0.0f, 3.0f, 1.0f, 5}; 
+    //scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
+    //scene[1] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
+    //scene[2] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
+    //scene[3] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
+    //scene[4] = (Sphere){0.0f, 0.0f, 3.0f, 1.0f, 5}; 
 
     // Sphere Data
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
@@ -338,10 +336,15 @@ int main(int argc, char* argv[])
 
     GLuint ssbo_spheres;
     GLuint ssbo_materials;
+    GLuint ssbo_vertices;
+    GLuint ssbo_indices;
+
     glGenBuffers(1, &ssbo_spheres);
     glGenBuffers(1, &ssbo_materials);
+    glGenBuffers(1, &ssbo_vertices);
+    glGenBuffers(1, &ssbo_indices);
 
-    SetupSceneData(ssbo_spheres, ssbo_materials);
+    SetupSceneData(ssbo_spheres, ssbo_materials, ssbo_vertices, ssbo_indices);
 
     GLuint program = CreateShaderProgram();
     glUseProgram(program);
