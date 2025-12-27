@@ -229,9 +229,9 @@ Material g_materials[] =
     {1.0f, 1.0f, 1.0f, 0.0f, 0.2f, 1.0f, 0.0f, 1.0f}, 
 
     // Emissive White 2
-    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 25.0f, 1.0f},
+    {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 10.0f, 1.0f},
 
-    {0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 15.0f, 1.0f},
+    {0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 5.0f, 1.0f},
 
     // Semi-Transparrent Blue 4
     {0.2f, 0.2f, 1.0f, 0.0f, 0.2f, 0.0f, 0.0f, 0.2f}, 
@@ -244,7 +244,7 @@ const int NUM_MATERIALS = sizeof(g_materials) / sizeof(Material);
 void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo, GLuint vertex_ssbo, GLuint index_ssbo)
 {
     // Load OBJ
-    MeshData mesh = load_obj("a.obj");
+    MeshData mesh = load_obj("tetrahedron.obj");
 
     if (mesh.vertices != NULL && mesh.indices != NULL)
     {
@@ -263,13 +263,14 @@ void SetupSceneData(GLuint sphere_ssbo, GLuint material_ssbo, GLuint vertex_ssbo
     else {fprintf(stderr, "Failed to load OBJ");}
 
     // Setup spheres
-    Sphere scene[5];
+    Sphere scene[6];
 
-    //scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
-    //scene[1] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
-    //scene[2] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
-    //scene[3] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
-    //scene[4] = (Sphere){0.0f, 0.0f, 3.0f, 1.0f, 5}; 
+    scene[0] = (Sphere){0.0f, 0.0f, 0.0f, 1.0f, 1};
+    scene[1] = (Sphere){2.5f, 0.0f, 0.0f, 0.5f, 3};
+    scene[2] = (Sphere){-2.5f, 0.0f, 0.0f, 0.5f, 2}; 
+    scene[3] = (Sphere){0.0f, 0.0f, -3.0f, 1.0f, 5}; 
+    scene[4] = (Sphere){0.0f, 0.0f, 3.0f, 1.0f, 5}; 
+    scene[5] = (Sphere){0.0f, -100.0f, 0.0f, 99.0f, 5};
 
     // Sphere Data
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphere_ssbo);
@@ -321,7 +322,7 @@ int main(int argc, char* argv[])
     }
 
     // Disable vSync
-    glfwSwapInterval(0);
+    glfwSwapInterval(1);
 
     // Fix Black Screen At Startup
     int initialWidth, initialheight;
